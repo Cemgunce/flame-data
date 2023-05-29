@@ -1,0 +1,108 @@
+#%%% Internpolation 9 closest grids after their elimination for threshold
+
+import matplotlib.pyplot as plt
+from scipy.spatial import distance
+from scipy.interpolate import griddata
+import numpy as np
+import progressbar
+
+# Assuming you have defined the functions 'read_piv_data' and 'normalized' earlier in your code.
+
+# Concatenate the arrays
+x_mm = np.concatenate(x_mm_list)
+y_mm = np.concatenate(y_mm_list)
+u_norm = np.concatenate(u_norm_list)
+v_norm = np.concatenate(v_norm_list)
+
+# Define your grid
+grid_x, grid_y = np.mgrid[np.min(x_mm):np.max(x_mm):1, np.min(y_mm):np.max(y_mm):1]
+
+# Define your data points
+points = np.vstack((x_mm.ravel(), y_mm.ravel())).T
+values_u = u_norm.ravel()
+values_v = v_norm.ravel()
+
+# Interpolate u and v components to the new grid
+u_interp = griddata(points, values_u, (grid_x, grid_y), method='cubic')
+v_interp = griddata(points, values_v, (grid_x, grid_y), method='cubic')
+
+# Same function for closest cells 
+def get_closest_grid_cells(point, grid_points, n=9):
+    """Find the n closest grid cells to the given point."""
+    distances = distance.cdist([point], grid_points)
+    indices = np.argsort(distances.ravel())[:n]
+    closest_points = grid_points[indices]
+    return closest_points
+
+# Create the figure and axis
+fig, ax = plt.subplots()
+
+# Calculate magnitude of interpolated velocity vectors
+magnitude = np.sqrt(u_interp ** 2 + v_interp ** 2)
+
+# Create a colored plot of the magnitude
+c = ax.pcolor(grid_x, grid_y, magnitude, cmap='viridis')
+
+# Create the colorbar
+fig.colorbar(c, ax=ax, label="Velocity magnitude")
+
+# Set x and y ticks
+ax.set_xticks(np.arange(np.min(x_mm) + 0.5, np.max(x_mm), 1))
+ax.set_yticks(np.arange(np.min(y_mm) + 0.5, np.max(y_mm), 1))
+
+# Enable grid
+ax.grid(visible=True)
+
+# Create a list of grid points
+grid_points = np.array(list(zip(grid_x.ravel(), grid_y.ravel())))
+
+# Plot the segments as thicker red lines and interpolated grid cells as green dots
+for i in range(len(final_segments)):
+    x_start = final_segments[i][0][0]
+    y_start = final_segments[i][0][1]
+    x_end = final_segments[i][0][2]
+    y_end = final_segments[i][0][3]
+    ax.plot([x_start, x_end], [y_start, y_end], 'r', linewidth=2)
+
+    # Find the 9 closest grid cells for the segment start and end points
+    closest_points_start = get_closest_grid_cells((x_start, y_start), grid_points, n=9)
+    closest_points_end = get_closest_grid_cells((x_end, y_end), grid_points, n=9)
+
+    # Check if grid cells are below the segment for unburnt cells, and above for burnt cells
+    unburnt_cells_start = []
+    burnt_cells_start = []
+    unburnt_cells_end = []
+    burnt_cells_end = []
+
+    for grid_point in closest_points_start:
+        if grid_point[1] < y_start:
+            unburnt_cells_start.append(grid_point)
+        else:
+            burnt_cells_start.append(grid_point)
+
+    for grid_point in closest_points_end:
+        if grid_point[1] < y_end:
+            unburnt_cells_end.append(grid_point)
+        else:
+            burnt_cells_end.append(grid_point)
+
+    unburnt_cells_start = np.array(unburnt_cells_start)
+    unburnt_cells_end = np.array(unburnt_cells_end)
+
+    burnt_cells_start = np.array(burnt_cells_start)
+    burnt_cells_end = np.array(burnt_cells_end)
+
+    # Reshape the arrays if they are empty
+    for cells in [unburnt_cells_start, unburnt_cells_end, burnt_cells_start, burnt_cells_end]:
+        if cells.size == 0:
+            cells = cells.reshape(0,2)
+
+    # Plot the unburnt and burnt grid cells
+    for unburnt_cells in [unburnt_cells_start, unburnt_cells_end]:
+        if unburnt_cells.size > 0:
+            ax.plot(unburnt_cells[:, 0], unburnt_cells[:, 1], 'gx', markersize=4)
+    for burnt_cells in [burnt_cells_start, burnt_cells_end]:
+        if burnt_cells.size > 0:
+            ax.plot(burnt_cells[:, 0], burnt_cells[:, 1], 'rx', markersize=4)
+
+plt.show()
